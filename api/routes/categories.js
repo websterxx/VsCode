@@ -119,7 +119,7 @@ router.patch('/:categoryId', (req, res, next) =>{
             });
         } else {
             Category
-            .findByIdAndUpdate({_id: req.params.categoryId},{name: req.body.name})
+            .update({_id: req.params.categoryId},{name: req.body.name})
             .exec()
             .then(res.status(200).json({
                 message: 'category UPDATED'

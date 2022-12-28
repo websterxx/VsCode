@@ -5,59 +5,131 @@ const checkAuth = require('../middleware/check-auth');
 
 const Product = require("../models/product");
 const Shop = require('../models/shop');
+const user = require("../models/user");
 
 // GET ALL SHOPS
 router.get('/', (req, res, next) =>{
-    Shop
-    .find()
-    .populate({
-        path: 'products',
-        select: { '_id': 1,'name':1},
-        populate: { path: 'categories',select: { '_id': 1,'name':1} }
-    })
-    .select('name _id')
+    if(req.query.afterDate == null && req.query.beforeDate == null){
+        const page = parseInt(req.query.page) - 1 || 0;
+        const limit = parseInt(req.query.limit) || 9999999999999;
+        const holiday = req.query.holiday || {$in: [false, true]};
+        console.log(new Date(Date.now()));
+        Shop
+        .find()
+        .select('managedBy name products creationDate isInHoliday _id')
+        .populate({
+            path: 'products',
+            select: { '_id': 1},
+            populate: { path: 'categories',select: { '_id': 1} }
+        })
+        .where({isInHoliday: holiday})
+        .skip(page * limit)
+        .limit(limit)
+        .exec()
+        .then(docs =>{
+            if(docs.length > 0 ){
+                res.status(200).json({
+                    count: docs.length,
+                    shops : docs
+                });
+            } else {
+                res.status(200).json({
+                    message: 'No entries found'
+                });
+            }
+        })
+        .catch(err => {
+            console.log(err);
+            res.status(500).json({error: err});
+        });
+    }
+    else {
+        const page = parseInt(req.query.page) - 1 || 0;
+        const limit = parseInt(req.query.limit) || 9999999999999;
+        const holiday = req.query.holiday || {$in: [false, true]};
+        const beforeDate = req.query.beforeDate || new Date("3000-12-30T00:00:00.000Z");
+        const afterDate = req.query.afterDate || new Date("1000-12-30T00:00:00.000Z");  
+        Shop
+        .find()
+        .select('managedBy name products creationDate isInHoliday _id')
+        .populate({
+            path: 'products',
+            select: { '_id': 1},
+            populate: { path: 'categories',select: { '_id': 1} }
+        })
+        .where({isInHoliday: holiday, creationDate :{$gte: afterDate, $lte: beforeDate}})
+        .skip(page * limit)
+        .limit(limit)
+        .exec()
+        .then(docs =>{
+            if(docs.length > 0 ){
+                res.status(200).json({
+                    count: docs.length,
+                    shops : docs
+                });
+            } else {
+                res.status(200).json({
+                    message: 'No entries found'
+                });
+            }
+        })
+        .catch(err => {
+            console.log(err);
+            res.status(500).json({error: err});
+        });
+    }
+});
+
+// CREATE A SHOP
+    router.post('/',(req, res, next) =>{
+
+    user
+    .findById({_id: req.body.managedBy })
     .exec()
-    .then(docs =>{
-        console.log(docs);
-        const response = {
-            count : docs.length,
-            shops: docs
-        };
-        if(docs.length > 0 ){
-            res.status(200).json(response);
-        } else {
-            res.status(200).json({
-                message: 'No entries found'
+    .then(currentUser =>{
+        if(currentUser == null){
+            res.status(403).json({message : 'The provided user was not found.'});
+        }
+        else if(currentUser.shopManaged != null){
+            res.status(403).json({message : 'The user is already a manager of a shop'});
+        }
+        else {
+            const shop = new Shop({
+                _id: new mongoose.Types.ObjectId(),
+                name: req.body.name,
+                managedBy: req.body.managedBy,
+                isInHoliday: req.body.isInHoliday,
+                creationDate : req.body.creationDate
+            });
+            shop
+            .save()
+            .then(result => {
+                user
+                .findByIdAndUpdate({_id: req.body.managedBy},{$set : {shopManaged: result._id, isManager: true}})
+                .exec()
+                .then(
+                    res.status(201).json({
+                    message: 'Handling POST request for /shops',
+                    createdShop : {
+                        name : result.name,
+                        _id : result._id
+                    }}
+                ))
+                .catch(err => {
+                    console.log(err);
+                    res.status(500).json({error: err});
+                });
+            })
+            .catch(err => {
+                console.log(err);
+                res.status(500).json({error: err});
             });
         }
     })
     .catch(err => {
-        console.log(err);
-        res.status(500).json({error: err});
-    });
-});
-
-// CREATE A SHOP
-router.post('/',(req, res, next) =>{
-    const shop = new Shop({
-        _id: new mongoose.Types.ObjectId(),
-        name: req.body.name
-    });
-    shop
-    .save()
-    .then(result => {
-        res.status(201).json({
-            message: 'Handling POST request for /shops',
-            createdShop : {
-                name : result.name,
-                _id : result._id
-            }
+            console.log(err);
+            res.status(500).json({error: err});
         });
-    })
-    .catch(err => {
-        console.log(err);
-        res.status(500).json({error: err});
-    });
 });
 
 // GET SHOP BY ID
@@ -65,16 +137,18 @@ router.get('/:shopId', (req, res, next) =>{
     const id = req.params.shopId;
     Shop
     .findById(id)
+    .select('managedBy name shopManaged creationDate isInHoliday _id')
     .populate({
         path: 'products',
-        select: { '_id': 1,'name':1},
-        populate: { path: 'categories',select: { '_id': 1,'name':1} }
+        select: { '_id': 1},
+        populate: { path: 'categories',select: { '_id': 1} }
     })
-    .select('name _id')
     .exec()
     .then(doc => {
         if(doc){
-            res.status(200).json(doc);
+            res.status(200).json({
+                shop : doc
+            });
         } else {
             res.status(404).json({message : 'No valid entry found the provided shop ID'});
         }
@@ -92,9 +166,9 @@ router.patch('/:shopId',(req, res, next) =>{
     for (const ops of req.body){
         updateOps[ops.propName] = ops.value;
     }
-    if ("products" in updateOps){
+    if ("products" in updateOps || "managedBy" in updateOps){
         res.status(401).json({
-            message: "You are only allowed to update the name or the image (or both) of a shop from this route."
+            message: "You are only allowed to update the name of the shop or if the shop is on holiday (or both) from this route."
         });
     }else {
 
@@ -102,7 +176,7 @@ router.patch('/:shopId',(req, res, next) =>{
         .findById({_id: req.params.shopId})
         .exec()
         .then(shop =>{
-            if(shop.length <1){
+            if(shop == null){
                 res.status(401).json({
                     message: "Please provided a valid shopId."
                 });
@@ -136,36 +210,157 @@ router.patch('/:shopId',(req, res, next) =>{
 // DELETE A SHOP
 router.delete('/:shopId',(req, res, next) =>{ 
    Shop
-   .remove({_id: req.params.shopId})
+   .find({_id: req.params.shopId})
    .exec()
-   .then(result =>{
-        if(result.deletedCount == 0){
-            res.status(401).json({
-                message: "The provided shopID doesn\'t match a shop in the DB."
-            });
-        }else {
+   .then(shop => {
+     if(shop.length < 1){
+        res.status(401).json({
+            message: "The provided shopID doesn\'t match a shop in the DB."
+        });
+     }
+     else{
+        Shop
+        .remove({_id: req.params.shopId})
+        .exec()
+        .then(
             Product
             .find({shopId: req.params.shopId})
             .remove()
             .exec()
             .then(
-                res.status(200).json({
+                user
+                .findOneAndUpdate({shopManaged : req.params.shopId},{$set: {shopManaged: null, isManager: false} })
+                .exec()
+                .then(
+                    res.status(200).json({
                     message: "Shop DELETED."
                 })
-           )
+                )
+                .catch(err =>{
+                    res.status(500).json({
+                        error : err
+                    });
+            })
+            )
             .catch(err =>{
                 res.status(500).json({
                     error : err
                 });
-           });
-        }
-   })
-   .catch(err =>{
+            }))
+                
+        }})
+    .catch(err =>{
         console.log(err);
         res.status(500).json({
             error : err
         });
    });
+});
+
+// UPDATE A SHOP MANAGER
+router.post('/:shopId/manager',(req, res, next) =>{
+    if(req.body.previousManager == null || req.body.newManager == null){
+        res.status(401).json({
+            message: "Please provide a valid previousManager and newManager fields ."
+        });
+    }
+    else {
+    Shop
+    .findById(req.params.shopId)
+    .exec()
+    .then(shop =>{
+        console.log(shop);
+        if(shop == null){
+            res.status(401).json({
+                message: "Please provided a valid shopId."
+            });
+        }
+        else {
+        user
+        .findById({_id: req.body.previousManager})
+        .exec()
+        .then(previousUser =>{
+            if (previousUser == null){
+                res.status(403).json({
+                    message: "Please provided a valid previousManger userId."
+                });
+            }else if(String(previousUser.shopManaged)!= String(shop._id)){
+                res.status(403).json({
+                    message: "The previousUser is not a manager of this shop."
+                });
+            }
+            else {
+            user
+            .findById({_id: req.body.newManager})
+            .exec()
+            .then(newUser =>{
+                if (newUser == null){
+                    res.status(403).json({
+                        message: "Please provided a valid newManager userId."
+                    });
+                }else if (newUser.shopManaged != null){
+                    res.status(403).json({
+                        message: "New manager is already a manager of another shop."
+                    });
+                }
+                else
+                {Shop
+                .update({_id: req.params.shopId},{$set : {managedBy: req.body.newManager}})
+                .exec()
+                .then(
+                    user
+                    .update({_id: req.body.previousManager},{$set : {shopManaged: null, isManager: true}})
+                    .exec()
+                    .then(
+                        user
+                        .update({_id: req.body.newManager},{$set : {shopManaged: req.params.shopId, isManager: true}})
+                        .then(
+                            res.status(200).json({
+                                message: "Shop manager updated."
+                            })
+                        )
+                        .catch(err =>{
+                            console.log(err);
+                            res.status(500).json({
+                                error : err
+                            });
+                       })
+                    )
+                    .catch(err =>{
+                        console.log(err);
+                        res.status(500).json({
+                            error : err
+                        });
+                   })
+                )
+                .catch(err =>{
+                    console.log(err);
+                    res.status(500).json({
+                        error : err
+                    });
+               });}
+            })
+            .catch(err =>{
+                console.log(err);
+                res.status(500).json({
+                    error : err
+                });
+           });
+        }})
+        .catch(err =>{
+            console.log(err);
+            res.status(500).json({
+                error : err
+            });
+       });    
+    }})
+    .catch(err =>{
+        console.log(err);
+        res.status(500).json({
+            error : err
+        });
+    });
+    }        
 });
 
 

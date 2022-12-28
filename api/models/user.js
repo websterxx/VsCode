@@ -19,7 +19,7 @@ const userSchema = mongoose.Schema({
         type: Boolean,
         default: false,
     },
-    shopsManaged : [{type: mongoose.Schema.Types.ObjectId , ref: 'Shop'}]
+    shopManaged : {type: mongoose.Schema.Types.ObjectId , ref: 'Shop' , default: null}
 }, {timestamps: true});
 
 module.exports = mongoose.model('User', userSchema);

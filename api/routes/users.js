@@ -35,7 +35,7 @@ router.get('/', (req, res, next) =>{
     console.log(new Date().setHours(8,0));
     User
     .find()
-    .select('userName email firstName lastName isAdmin password _id')
+    .select('userName email firstName lastName isAdmin isManager password shopManaged _id')
     .exec()
     .then(docs =>{
         const response = {
@@ -60,7 +60,7 @@ router.get('/', (req, res, next) =>{
 router.get('/:userId', (req, res, next) =>{
     User
     .find({_id: req.params.userId})
-    .select('userName email password firstName isAdmin lastName _id')
+    .select('userName email password firstName isAdmin isManager lastName shopManaged _id')
     .exec()
     .then(user =>{
         console.log(user);
@@ -84,7 +84,7 @@ router.patch('/:userId',(req, res, next) =>{
     for (const ops of req.body){
         updateOps[ops.propName] = ops.value;
     }
-    if ("password" in updateOps || "email" in updateOps){
+    if ("password" in updateOps || "email" in updateOps || "shopManaged" in updateOps){
         res.status(401).json({
             message: "You are only allowed to update the firstName or the lastName (or both) of a user from this route."
         });
@@ -234,21 +234,8 @@ router.post('/admin/remove/:userId',(req, res, next) =>{
 }
 );
 
-// Make a user a manager
-// router.post('/:shopId/manager/:userId',(req, res, next) =>{
-//     Shop
-//     .find({_id: req.params.shopId})
-//     .exec()
-//     .then(shop =>{
-//         if(shop.length <1){
-//             res.status(401).json({
-//                 message: 'Please provided a valid shopId.'
-//             });
-//         }else if(shop[0].managedBy != null) {
-//             res.status(401).json({
-//                 message: 'Shop already managed by someone.'
-//             });
-//         }else {
+// Make user a manager
+// router.post('/manager/:userId',(req, res, next) =>{
 //             User
 //             .find({_id: req.params.userId})
 //             .exec()
@@ -257,24 +244,67 @@ router.post('/admin/remove/:userId',(req, res, next) =>{
 //                     res.status(401).json({
 //                         message: 'Please provided a valid userId.'
 //                     });
-//                 }else {
+//                 }else if(user[0].isManager){
+//                     res.status(401).json({
+//                         message: 'The provided user already have the manager role.'
+//                     });
+//                 }
+//                 else {
 //                     User
-//                     .update({_id: req.params.userId},{$set: {isManager: true},$push: {shopsManaged: req.params.shopId}})
+//                     .update({_id: req.params.userId},{$set: {isManager: true}})
 //                     .exec()
 //                     .then(
-                        
+//                         res.status(200).json({
+//                             message: 'The provided user have now the manager role.'
+//                         })
 //                     )
-//                     .catch();
+//                     .catch(err => {
+//                         console.log(err);
+//                         res.status(500).json({error: err});
+//                     });
 //                 }
 //             })
-//             .catch();
+//             .catch(err => {
+//                 console.log(err);
+//                 res.status(500).json({error: err});
+//             });
+        
+//         });
+
+// Remove user manager role 
+// router.post('/manager/remove/:userId',(req, res, next) =>{
+//     User
+//     .find({_id: req.params.userId})
+//     .exec()
+//     .then(user =>{
+//         if(user.length < 1 ){
+//             res.status(401).json({
+//                 message: 'User not found.'
+//             });
+//         } else if(!user[0].isManager) {
+//             res.status(401).json({
+//                 message: 'User is already not a manager.'
+//             });
+//         }else {
+//             User
+//             .update({_id: req.params.userId},{$set:{isManager: false}})
+//             .exec()
+//             .then(res.status(200).json(
+//                 {
+//                     message: 'User manager role removed.'
+                
+//                 }))
+//             .catch(err => {
+//                 console.log(err);
+//                 res.status(500).json({error: err});
+//             });
 //         }
 //     })
-//     .catch();
+//     .catch(err => {
+//         console.log(err);
+//         res.status(500).json({error: err});
+//     });
 // }
 // );
-
-// Make a user a manager
-
 
 module.exports = router;
