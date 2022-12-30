@@ -6,11 +6,14 @@ const userSchema = mongoose.Schema({
     lastName: {type: String, default: null},
     email: {
         type: String,
-            required: true,
-            unique: true,
-            match: /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/,
-            immutable:true },
-    password: {type: String},
+        required: true,
+        unique: true,
+        match: /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/,
+        immutable:true },
+    password: {
+        type: String,
+        required: true
+        },
     isAdmin: {
         type: Boolean,
         default: false,

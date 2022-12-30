@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const mongoose = require('mongoose');
-const checkAuth = require('../middleware/check-auth');
+const {verifyTokenAndIsAdminOrSameManager,verifyTokenAndAdminOrManager} = require('../middleware/checkAuthorization');
 
 const Product = require("../models/product");
 const Shop = require('../models/shop');
@@ -16,7 +16,7 @@ router.get('/', (req, res, next) =>{
         console.log(new Date(Date.now()));
         Shop
         .find()
-        .select('managedBy name products creationDate isInHoliday _id')
+        .select('managedBy name products creationDate openningHours isInHoliday _id')
         .populate({
             path: 'products',
             select: { '_id': 1},
@@ -51,7 +51,7 @@ router.get('/', (req, res, next) =>{
         const afterDate = req.query.afterDate || new Date("1000-12-30T00:00:00.000Z");  
         Shop
         .find()
-        .select('managedBy name products creationDate isInHoliday _id')
+        .select('managedBy name products creationDate openningHours isInHoliday _id')
         .populate({
             path: 'products',
             select: { '_id': 1},
@@ -81,55 +81,91 @@ router.get('/', (req, res, next) =>{
 });
 
 // CREATE A SHOP
-    router.post('/',(req, res, next) =>{
-
-    user
-    .findById({_id: req.body.managedBy })
-    .exec()
-    .then(currentUser =>{
-        if(currentUser == null){
-            res.status(403).json({message : 'The provided user was not found.'});
+    router.post('/',verifyTokenAndAdminOrManager,(req, res, next) =>{
+    var openningHours = req.body.openningHours;
+    var days = true;
+    days = openningHours.map((obj)=>{
+        if(obj.day != "Mon" || "Tue" || "Web" || "Thu" || "Fri" || "Sat" || "Sun" ){
+            return false;
         }
-        else if(currentUser.shopManaged != null){
-            res.status(403).json({message : 'The user is already a manager of a shop'});
-        }
-        else {
-            const shop = new Shop({
-                _id: new mongoose.Types.ObjectId(),
-                name: req.body.name,
-                managedBy: req.body.managedBy,
-                isInHoliday: req.body.isInHoliday,
-                creationDate : req.body.creationDate
-            });
-            shop
-            .save()
-            .then(result => {
+        return true;
+    });
+    if(openningHours == null){
+        res.status(403).json({message : 'Please provide the openningHours(days,periods) array.'});
+    }
+    else if(days.length != 7 || false in days){
+        res.status(403).json({
+            message : 'OpenningHours length must be exactly 7 and must represent the whole days of the week.'
+        });
+    }
+    else {
+        Shop
+        .find({name: req.body.name})
+        .exec()
+        .then(shops =>{
+            if(shops.length > 0){
+                res.status(403).json({
+                    message : 'There is alreay a shop with the same name.'
+                })
+            }else {
                 user
-                .findByIdAndUpdate({_id: req.body.managedBy},{$set : {shopManaged: result._id, isManager: true}})
+                .findById({_id: req.body.managedBy })
                 .exec()
-                .then(
-                    res.status(201).json({
-                    message: 'Handling POST request for /shops',
-                    createdShop : {
-                        name : result.name,
-                        _id : result._id
-                    }}
-                ))
+                .then(currentUser =>{
+                    if(currentUser == null){
+                        res.status(403).json({message : 'The provided manager was not found.'});
+                    }
+                    else if(!currentUser.isManager){
+                        res.status(403).json({message : 'The manager provided does not have the manager role.'});
+                    }
+                    else if(currentUser.shopManaged != null){
+                        res.status(403).json({message : 'The manager provided is already a manager of another shop.'});
+                    }
+                    else {
+                        const shop = new Shop({
+                            _id: new mongoose.Types.ObjectId(),
+                            name: req.body.name,
+                            managedBy: req.body.managedBy,
+                            isInHoliday: req.body.isInHoliday,
+                            creationDate : req.body.creationDate,
+                            openningHours: openningHours
+                        });
+                        shop
+                        .save()
+                        .then(result => {
+                            user
+                            .findByIdAndUpdate({_id: req.body.managedBy},{$set : {shopManaged: result._id}})
+                            .exec()
+                            .then(
+                                res.status(201).json({
+                                message: 'Handling POST request for /shops',
+                                createdShop : {
+                                    name : result.name,
+                                    _id : result._id
+                                }}
+                            ))
+                            .catch(err => {
+                                console.log(err);
+                                res.status(500).json({error: err});
+                            });
+                        })
+                        .catch(err => {
+                            console.log(err);
+                            res.status(500).json({error: err});
+                        });
+                    }
+                })
                 .catch(err => {
-                    console.log(err);
-                    res.status(500).json({error: err});
-                });
-            })
-            .catch(err => {
-                console.log(err);
-                res.status(500).json({error: err});
-            });
-        }
-    })
-    .catch(err => {
+                        console.log(err);
+                        res.status(500).json({error: err});
+                    });
+            }
+        })
+        .catch(err => {
             console.log(err);
             res.status(500).json({error: err});
         });
+    }
 });
 
 // GET SHOP BY ID
@@ -137,7 +173,7 @@ router.get('/:shopId', (req, res, next) =>{
     const id = req.params.shopId;
     Shop
     .findById(id)
-    .select('managedBy name shopManaged creationDate isInHoliday _id')
+    .select('managedBy name shopManaged creationDate openningHours isInHoliday _id')
     .populate({
         path: 'products',
         select: { '_id': 1},
@@ -161,7 +197,7 @@ router.get('/:shopId', (req, res, next) =>{
 });
 
 // UPDATE A SHOP
-router.patch('/:shopId',(req, res, next) =>{
+router.patch('/:shopId',verifyTokenAndIsAdminOrSameManager,(req, res, next) =>{
     const updateOps = {};
     for (const ops of req.body){
         updateOps[ops.propName] = ops.value;
@@ -208,7 +244,7 @@ router.patch('/:shopId',(req, res, next) =>{
 });
 
 // DELETE A SHOP
-router.delete('/:shopId',(req, res, next) =>{ 
+router.delete('/:shopId',verifyTokenAndIsAdminOrSameManager,(req, res, next) =>{ 
    Shop
    .find({_id: req.params.shopId})
    .exec()
@@ -229,7 +265,7 @@ router.delete('/:shopId',(req, res, next) =>{
             .exec()
             .then(
                 user
-                .findOneAndUpdate({shopManaged : req.params.shopId},{$set: {shopManaged: null, isManager: false} })
+                .findOneAndUpdate({shopManaged : req.params.shopId},{$set: {shopManaged: null} })
                 .exec()
                 .then(
                     res.status(200).json({
@@ -258,7 +294,7 @@ router.delete('/:shopId',(req, res, next) =>{
 });
 
 // UPDATE A SHOP MANAGER
-router.post('/:shopId/manager',(req, res, next) =>{
+router.post('/:shopId/manager',verifyTokenAndIsAdminOrSameManager,(req, res, next) =>{
     if(req.body.previousManager == null || req.body.newManager == null){
         res.status(401).json({
             message: "Please provide a valid previousManager and newManager fields ."
@@ -298,7 +334,12 @@ router.post('/:shopId/manager',(req, res, next) =>{
                     res.status(403).json({
                         message: "Please provided a valid newManager userId."
                     });
-                }else if (newUser.shopManaged != null){
+                }else if (!newUser.isManager){
+                    res.status(403).json({
+                        message: "New manager provided does not have the manager role."
+                    });
+                }
+                else if (newUser.shopManaged != null){
                     res.status(403).json({
                         message: "New manager is already a manager of another shop."
                     });
@@ -309,11 +350,11 @@ router.post('/:shopId/manager',(req, res, next) =>{
                 .exec()
                 .then(
                     user
-                    .update({_id: req.body.previousManager},{$set : {shopManaged: null, isManager: true}})
+                    .update({_id: req.body.previousManager},{$set : {shopManaged: null}})
                     .exec()
                     .then(
                         user
-                        .update({_id: req.body.newManager},{$set : {shopManaged: req.params.shopId, isManager: true}})
+                        .update({_id: req.body.newManager},{$set : {shopManaged: req.params.shopId}})
                         .then(
                             res.status(200).json({
                                 message: "Shop manager updated."

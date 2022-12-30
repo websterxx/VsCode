@@ -1,14 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const mongoose = require('mongoose');
-const checkAuth = require('../middleware/check-auth');
+const {verifyTokenAndIsAdminOrSameManager} = require('../middleware/checkAuthorization');
 
 const Product = require('../models/product');
 const Shop = require('../models/shop');
 
 
 // Create product
-router.post('/:shopId/',(req, res, next) =>{
+router.post('/:shopId/',verifyTokenAndIsAdminOrSameManager,(req, res, next) =>{
         Shop
         .findById({_id: req.params.shopId})
         .exec()
@@ -18,34 +18,49 @@ router.post('/:shopId/',(req, res, next) =>{
                     message: "The provided shopID doesn\'t match a shop in the DB"
                 });
             }else{
-                const product = new Product({
-                    _id: new mongoose.Types.ObjectId(),
-                    shopId: req.params.shopId,
-                    name: req.body.name,
-                    price: req.body.price,
-                    description: req.body.description,
-                    categories: req.body.category
-                });
-            product
-            .save()
-            .then(result =>{
-                console.log(result.categories);
-                Shop
-                .findByIdAndUpdate({_id: req.params.shopId},{$push : {products: result._id}})
-                .exec()
-                .then(resu =>{
-                    res.status(201).json({
-                        message: 'Handling POST request for /product',
-                        createdProduct : {
-                            name : result.name,
-                            _id : result._id
-                        }
+            Product
+            .find({name : req.body.name , shopId: req.params.shopId})
+            .exec()
+            .then(products =>{
+                if(products.length > 1){
+                    res.status(403).json({
+                        message : 'There is already a product with same name provided in this shop.'
                     });
-                })
-                .catch(err => {
-                    console.log(err);
-                    res.status(500).json({error: err});
-                }); 
+                }else {
+                    const product = new Product({
+                        _id: new mongoose.Types.ObjectId(),
+                        shopId: req.params.shopId,
+                        name: req.body.name,
+                        price: req.body.price,
+                        description: req.body.description,
+                        categories: req.body.category
+                    });
+                    product
+                    .save()
+                    .then(result =>{
+                        console.log(result.categories);
+                        Shop
+                        .findByIdAndUpdate({_id: req.params.shopId},{$push : {products: result._id}})
+                        .exec()
+                        .then(resu =>{
+                            res.status(201).json({
+                                message: 'Handling POST request for /product',
+                                createdProduct : {
+                                    name : result.name,
+                                    _id : result._id
+                                }
+                            });
+                        })
+                        .catch(err => {
+                            console.log(err);
+                            res.status(500).json({error: err});
+                        }); 
+                    })
+                    .catch(err => {
+                        console.log(err);
+                        res.status(500).json({error: err});
+                    });
+                }
             })
             .catch(err => {
                 console.log(err);
@@ -179,7 +194,7 @@ router.get('/:shopId/:productId',(req, res, next) =>{
 });
 
 // DELETE a product from a shop 
-router.delete('/:shopId/:productId',(req, res, next) =>{
+router.delete('/:shopId/:productId',verifyTokenAndIsAdminOrSameManager,(req, res, next) =>{
     Shop
     .findById({_id: req.params.shopId})
     .exec()
@@ -236,7 +251,7 @@ router.delete('/:shopId/:productId',(req, res, next) =>{
 });
 
 // UPDATE a product of a shop
-router.patch('/:shopId/:productId',(req, res, next) =>{
+router.patch('/:shopId/:productId',verifyTokenAndIsAdminOrSameManager,(req, res, next) =>{
     const updateOps = {};
     for (const ops of req.body){
         updateOps[ops.propName] = ops.value;

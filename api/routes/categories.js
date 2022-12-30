@@ -1,13 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const mongoose = require('mongoose');
-const checkAuth = require('../middleware/check-auth');
+const {verifyTokenAndIsAdmin} = require('../middleware/checkAuthorization');
 
 const Category = require('../models/category');
 
 
 // Create category
-router.post('/',(req, res, next) =>{
+router.post('/',verifyTokenAndIsAdmin,(req, res, next) =>{
     const category = new Category({
         _id: new mongoose.Types.ObjectId(),
         name: req.body.name
@@ -77,7 +77,7 @@ router.get('/:categoryId', (req, res, next) =>{
 });
 
 // DELETE category by id
-router.delete('/:categoryId', (req, res, next) =>{
+router.delete('/:categoryId',verifyTokenAndIsAdmin,(req, res, next) =>{
     Category
     .find({_id: req.params.categoryId})
     .exec()
@@ -108,7 +108,7 @@ router.delete('/:categoryId', (req, res, next) =>{
 });
 
 // UPDATE category by id
-router.patch('/:categoryId', (req, res, next) =>{
+router.patch('/:categoryId',verifyTokenAndIsAdmin, (req, res, next) =>{
     Category
     .find({_id: req.params.categoryId})
     .exec()
