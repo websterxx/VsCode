@@ -93,6 +93,8 @@ router.get('/:shopId/',(req, res, next) =>{
                 Product
                 .find({shopId: req.params.shopId})
                 .select('_id shopId name description categories')
+                .populate({
+                    path: 'categories',select: { '_id': 1, 'name':1} })
                 .skip(page * limit)
                 .limit(limit)
                 .exec()

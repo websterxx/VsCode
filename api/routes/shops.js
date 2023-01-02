@@ -20,7 +20,7 @@ router.get('/', (req, res, next) =>{
         .populate({
             path: 'products',
             select: { '_id': 1},
-            populate: { path: 'categories',select: { '_id': 1} }
+            populate: { path: 'categories',select: { '_id': 0,'name': 1} }
         })
         .where({isInHoliday: holiday})
         .skip(page * limit)
