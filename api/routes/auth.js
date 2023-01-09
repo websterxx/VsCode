@@ -87,7 +87,7 @@ router.post("/login",verifyIsNotAuthenticated,(req, res, next) =>{
             if(err){
                 return res.status(401).json({
                     message: "Auth failed"
-                });   
+                });
             }
             if(result){
                 const token =jwt.sign({
@@ -104,8 +104,9 @@ router.post("/login",verifyIsNotAuthenticated,(req, res, next) =>{
 
                 return res.status(200).json({
                     message: "Auth successful",
+                    user: user,
                     token : token
-                }); 
+                });
             }
             return res.status(401).json({
                 message: "Auth failed"
